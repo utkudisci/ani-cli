@@ -6,6 +6,7 @@ import threading
 from core.scraper import AniScraper
 from core.download_manager import download_manager
 from core.history_manager import history_manager
+from core.rpc_manager import rpc_manager
 import subprocess
 
 class EpisodeDetailView(ft.Column):
@@ -177,6 +178,8 @@ class EpisodeDetailView(ft.Column):
                 on_complete=on_dl_complete,
                 on_error=on_dl_error
             )
+            # Update Discord RPC
+            rpc_manager.update_activity(self.anime["title"], ep_no, state="Downloading")
             self.show_snack(f"Download started: Episode {ep_no}")
             
         except Exception as e:
@@ -320,6 +323,10 @@ class EpisodeDetailView(ft.Column):
             self.loading_overlay.update()
             
             print(f"Final Stream URL: {stream_url}")
+            
+            # Update Discord RPC
+            rpc_manager.update_activity(self.anime["title"], ep_no)
+
             # Launch MPV
             cmd = [
                 "mpv",
