@@ -1,6 +1,10 @@
 
 import flet as ft
 from core.history_manager import history_manager
+from core.history_manager import history_manager
+from core.history_manager import history_manager
+from core.settings_manager import settings_manager
+from core.theme_manager import theme_manager
 
 class HomeView(ft.Column):
     def __init__(self, page: ft.Page, on_search=None, on_anime_click=None, on_mode_change=None):
@@ -21,18 +25,25 @@ class HomeView(ft.Column):
             border_radius=10,
         )
         
-        # Sub/Dub mode selection (default: sub)
-        self.selected_mode = "sub"
+        # Sub/Dub mode selection (load from settings)
+        # Sub/Dub mode selection (load from settings)
+        self.selected_mode = settings_manager.get("playback", "default_mode") or "sub"
+        
+        # Determine initial colors
+        theme = theme_manager.get_theme()
+        sub_color = theme.primary if self.selected_mode == "sub" else theme.surface
+        dub_color = theme.primary if self.selected_mode == "dub" else theme.surface
+        
         self.sub_button = ft.ElevatedButton(
             "SUB",
-            bgcolor="blue",
-            color="white",
+            bgcolor=sub_color,
+            color=theme.text,
             on_click=lambda e: self.set_mode("sub")
         )
         self.dub_button = ft.ElevatedButton(
             "DUB",
-            bgcolor="grey700",  # Start unhighlighted with grey
-            color="white",
+            bgcolor=dub_color,
+            color=theme.text,
             on_click=lambda e: self.set_mode("dub")
         )
         
@@ -71,7 +82,7 @@ class HomeView(ft.Column):
                     ft.Row([
                         self.sub_button,
                         self.dub_button,
-                    ], spacing=10),
+                    ], spacing=10, alignment=ft.MainAxisAlignment.CENTER),
                     ft.Container(height=5),
                     ft.Row([
                         self.search_field,
@@ -256,27 +267,35 @@ class HomeView(ft.Column):
             self.on_anime_click(anime_data)
     
     def set_mode(self, mode):
-        """Switch between SUB and DUB mode"""
         self.selected_mode = mode
+        self._update_theme_colors() # Update colors based on selection and theme
         
-        # Notify app_layout about mode change
         if self.on_mode_change:
             self.on_mode_change(mode)
+            
+    def did_mount(self):
+        theme_manager.add_listener(self._on_theme_update)
+        # Also load data here if needed, but it's done in init
         
-        # Update button colors with explicit values
-        if mode == "sub":
-            self.sub_button.bgcolor = "blue"
-            self.sub_button.color = "white"
-            self.dub_button.bgcolor = "grey700"  # Explicit grey color
-            self.dub_button.color = "white"
-        else:
-            self.dub_button.bgcolor = "blue"
-            self.dub_button.color = "white"
-            self.sub_button.bgcolor = "grey700"  # Explicit grey color
-            self.sub_button.color = "white"
+    def will_unmount(self):
+        theme_manager.remove_listener(self._on_theme_update)
         
-        self.sub_button.update()
-        self.dub_button.update()
+    def _on_theme_update(self):
+        self._update_theme_colors()
+        self.update()
+
+    def _update_theme_colors(self):
+        theme = theme_manager.get_theme()
+        
+        self.sub_button.bgcolor = theme.primary if self.selected_mode == "sub" else theme.surface
+        self.sub_button.color = theme.text
+        
+        self.dub_button.bgcolor = theme.primary if self.selected_mode == "dub" else theme.surface
+        self.dub_button.color = theme.text
+        
+        if self.page:
+            self.sub_button.update()
+            self.dub_button.update()
     
     def handle_search(self, e):
         query = self.search_field.value.strip()

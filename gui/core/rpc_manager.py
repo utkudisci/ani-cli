@@ -1,6 +1,7 @@
 from pypresence import Presence
 import time
 import threading
+from core.settings_manager import settings_manager
 
 # Use a generic client ID or your own
 CLIENT_ID = "1468834568613265501"  # Generic "Anime Client" ID placeholder or reliable one
@@ -25,23 +26,27 @@ class RPCManager:
 
     def update_activity(self, anime_title, episode_no, state="Watching"):
         """Update Discord Presence"""
+        # Check if RPC is enabled in settings
+        if not settings_manager.get("discord_rpc", "enabled"):
+            return
+            
         if not self.connected or not self.rpc:
             return
 
         try:
-            # Should be run in thread? pypresence updates are usually fast but network calls.
-            # Lets just try direct first.
             if not self.start_time:
                 self.start_time = time.time()
-                
-            details = f"{anime_title}"
-            state_text = f"Episode {episode_no}"
+            
+            # Respect privacy settings
+            show_title = settings_manager.get("discord_rpc", "show_title")
+            show_episode = settings_manager.get("discord_rpc", "show_episode")
+            
+            details = anime_title if show_title else "Watching Anime"
+            state_text = f"Episode {episode_no}" if show_episode else "Watching"
             
             self.rpc.update(
                 state=state_text,
                 details=details,
-                # large_image="ani_neco_arc", # These require uploaded assets in Dev Portal
-                # small_image="play_icon",
                 start=self.start_time
             )
             print(f"✅ RPC Updated: {details} - {state_text}")

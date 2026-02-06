@@ -3,6 +3,14 @@ import flet as ft
 from core.scraper import AniScraper
 from ui.detail_view import EpisodeDetailView
 from ui.home_view import HomeView
+from ui.detail_view import EpisodeDetailView
+from ui.home_view import HomeView
+from ui.settings_view import SettingsView
+from ui.downloads_view import DownloadsView
+from ui.settings_view import SettingsView
+from ui.downloads_view import DownloadsView
+from core.settings_manager import settings_manager
+from core.theme_manager import theme_manager
 
 class AppLayout(ft.Column):
     def __init__(self, page: ft.Page):
@@ -11,7 +19,7 @@ class AppLayout(ft.Column):
         # We don't need to store it manually.
         self.scraper = AniScraper()
         self.current_view = "home"  # Track current view
-        self.current_mode = "sub"  # Track current sub/dub mode
+        self.current_mode = settings_manager.get("playback", "default_mode") or "sub"  # Track current sub/dub mode
         
         self.results_grid = ft.GridView(
             expand=1,
@@ -45,11 +53,86 @@ class AppLayout(ft.Column):
             page, 
             on_search=self.search_from_home,
             on_anime_click=self.on_anime_click,
-            on_mode_change=self.on_mode_change  # Add mode change callback
+            on_mode_change=self.on_mode_change,  # Add mode change callback
         )
 
         # Start with home view
         self.controls = [self.home_view]
+        
+        # Settings overlay (initially None)
+        # Settings overlay (initially None)
+        self.settings_overlay = None
+
+        # Downloads View (overlay, initially None in page.overlay)
+        self.downloads_view = DownloadsView(page, on_close=self._close_downloads)
+        
+    def did_mount(self):
+        """Called after component is mounted"""
+        # Apply initial theme
+        theme_manager.apply_theme(self.page)
+        theme_manager.add_listener(self._on_theme_update)
+        
+        # Add floating settings and downloads buttons
+        self._update_fabs()
+        
+        self.page.floating_action_button = self.fabs_row
+        self.page.update()
+
+    def will_unmount(self):
+        theme_manager.remove_listener(self._on_theme_update)
+        
+    def _on_theme_update(self):
+        """Update UI when theme changes"""
+        theme = theme_manager.get_theme()
+        # Update FABs
+        self._update_fabs()
+        self.page.floating_action_button = self.fabs_row
+        self.page.update()
+        
+    def _update_fabs(self):
+        theme = theme_manager.get_theme()
+        self.fabs_row = ft.Row([
+            ft.FloatingActionButton(
+                icon=ft.Icons.DOWNLOAD,
+                on_click=self._open_downloads,
+                tooltip="Downloads",
+                bgcolor=theme.primary,
+                foreground_color=theme.text
+            ),
+            ft.FloatingActionButton(
+                icon=ft.Icons.SETTINGS,
+                on_click=self._open_settings,
+                tooltip="Settings",
+                bgcolor=theme.surface,
+                foreground_color=theme.text
+            )
+        ], tight=True, spacing=10)
+        
+    def _open_downloads(self, e):
+        """Open downloads overlay"""
+        if self.downloads_view not in self.page.overlay:
+            self.page.overlay.append(self.downloads_view)
+            self.page.update()
+
+    def _close_downloads(self):
+        """Close downloads overlay"""
+        if self.downloads_view in self.page.overlay:
+            self.page.overlay.remove(self.downloads_view)
+            self.page.update()
+    
+    def _open_settings(self, e):
+        """Open settings overlay"""
+        if self.settings_overlay is None:
+            self.settings_overlay = SettingsView(self.page, on_close=self._close_settings)
+            self.page.overlay.append(self.settings_overlay)
+            self.page.update()
+    
+    def _close_settings(self):
+        """Close settings overlay"""
+        if self.settings_overlay:
+            self.page.overlay.remove(self.settings_overlay)
+            self.settings_overlay = None
+            self.page.update()
     
     def on_mode_change(self, mode):
         """Handle mode change from home view toggle"""
