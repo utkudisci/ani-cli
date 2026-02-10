@@ -1,55 +1,52 @@
-# 🎬 Ani-Cli GUI
+# 🎬 Ani Cli GUI
 
-### A modern, premium anime streaming experience powered by the reliable `ani-cli` engine.
+A fresh, high grade anime streamer that runs on the solid ani-cli engine.
 
-Ani-Cli GUI brings your favorite anime straight to your desktop with a stunning interface, anime-inspired themes, and a robust set of features designed for the ultimate viewer.
-
----
-
-## ✨ Features
-
-### 🎨 Anime-Inspired Themes
-Personalize your experience with themes inspired by legendary series:
-- **Saiyan**: Pure orange and blue energy.
-- **Eva-01**: Deep purple and green mechanical aesthetics.
-- **Straw Hat**: Vibrant red and yellow adventure.
-- **Demon**: Dark green and black slayer vibes.
-- **Standard**: A clean, modern dark mode.
-
-### 🔍 Seamless Browsing & Searching
-Easily find any anime using our integrated scraper. View detailed information, episode lists, and stunning thumbnails.
-
-### 📥 Built-in Download Manager
-Download episodes directly within the app. Manage your downloads with ease and watch offline whenever you want.
-
-### 📜 Watch History & Favorites
-Never lose your place again. The GUI automatically tracks your watch history and allows you to favorite shows for quick access.
-
-### 🎮 Discord Rich Presence
-Share your anime journey with your friends! Automatically update your Discord status with the show and episode you're currently watching.
+Ani-Cli GUI drops every show you love straight onto your desktop. It greets you with a sharp screen, skins that echo famous series and a toolkit built for plain comfort.
 
 ---
 
-## 🚀 Getting Started
+What it offers
 
-### Installation
 
-1.  **Clone the repository**:
-    ```sh
-    git clone https://github.com/pystardust/ani-cli.git
-    cd ani-cli/gui
-    ```
-2.  **Install dependencies**:
-    ```sh
-    pip install -r requirements.txt
-    ```
-3.  **Run the application**:
-    ```sh
-    python main.py
-    ```
-    *Alternatively, use the `run_gui.bat` in the root directory.*
+Skins that honor anime
+Swap the look at any time - each skin borrows its colors from a well known show
+- Saiyan - bold orange plus blue
+- Eva-01 - deep purple and heavy green
+- Straw Hat - bright red but also sunny yellow
+- Demon - dark green plus black
+- Standard - a tidy dark sheet
+
+Browse and search without friction
+The built in scraper pulls data from the web - you see full titles, episode counts as well as crisp cover pictures in one pane.
+
+Grab episodes inside the app
+Start a download, pause it, resume it or wipe it - all files land in a folder you pick - you watch later even when offline.
+
+History and star list
+The tool logs every episode you finish. Favorite a whole series or it sticks to the top row.
+
+Discord Rich Presence
+Your Discord profile tells friends which show and episode play right now. No extra setup needed.
 
 ---
 
-## 🛠️ Performance & Tech
-Built with **Flet (Flutter for Python)**, Ani-Cli GUI offers a smooth, cross-platform experience with native-feeling interactions and micro-animations.
+How to start
+
+Clone the Repo
+```sh
+git clone https://github.com/pystardust/ani-cli.git
+cd ani-cli/gui
+```
+
+Download the required libraries in requirements.txt
+```sh
+pip install -r requirements.txt
+```
+
+Launch
+```sh
+python main.py
+```
+
+Setup installer will be coming soon.
