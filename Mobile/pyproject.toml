@@ -1,0 +1,38 @@
+[project]
+name = "ani-gui-mobile"
+version = "0.1.0"
+description = "Android client for Ani-GUI"
+requires-python = ">=3.13"
+dependencies = [
+    "flet==0.86.2",
+    "flet-video==0.86.2",
+    "requests>=2.32",
+    "cryptography>=45",
+    "yt-dlp>=2026.7.4",
+]
+
+[tool.flet]
+product = "Ani-GUI Mobile"
+org = "com.utkudisci"
+bundle_id = "com.utkudisci.aniguimobile"
+build_number = 1
+
+[tool.flet.app]
+path = "src"
+module = "main"
+
+[tool.flet.android]
+split_per_abi = true
+target_arch = ["arm64-v8a"]
+
+[tool.flet.android.permission]
+"android.permission.INTERNET" = true
+"android.permission.WAKE_LOCK" = true
+
+[tool.flet.android.manifest_application]
+allowBackup = "true"
+usesCleartextTraffic = "false"
+
+[tool.flet.splash]
+color = "#10131A"
+dark_color = "#10131A"

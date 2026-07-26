@@ -1,0 +1,8 @@
+.flet/
+.mobile-data/
+build/
+__pycache__/
+*.py[cod]
+*.jks
+*.keystore
+.env

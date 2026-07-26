@@ -1,0 +1,5 @@
+flet==0.86.2
+flet-video==0.86.2
+requests>=2.32
+cryptography>=45
+yt-dlp>=2026.7.4
