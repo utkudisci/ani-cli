@@ -2,20 +2,125 @@
 import requests
 import json
 import re
+import base64
+import hashlib
+import time
 from typing import List, Dict, Optional
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from yt_dlp import YoutubeDL
 
 class AniScraper:
     BASE_URL = "https://allanime.day"
-    API_URL = "https://api.allanime.day/api"
-    REFERER = "https://allmanga.to"
-    AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0"
+    API_URL = "https://api.mkissa.net/api"
+    REFERER = "https://mkissa.to"
+    CDN_URL = "https://cdn.mkissa.net/all/mk/_app/immutable"
+    QUERY_HASH = "f4662f4b7510b26795dd53ef824a0bf1740fbbc5d1273fab18222ac831bca8d0"
+    AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0"
 
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": self.AGENT,
-            "Referer": self.REFERER
+            "Referer": self.REFERER,
+            "Origin": self.REFERER,
         })
+        self._api_key = None
+        self._api_epoch = None
+        self.last_error = None
+
+    def _graphql(self, query: str, variables: Dict) -> Dict:
+        response = self.session.post(
+            self.API_URL,
+            json={"variables": variables, "query": query},
+            timeout=20,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if data.get("errors"):
+            raise RuntimeError(data["errors"][0].get("message", "GraphQL request failed"))
+        return data
+
+    def _fetch_api_key(self) -> None:
+        page = self.session.get(self.REFERER, timeout=20)
+        page.raise_for_status()
+
+        epoch_match = re.search(r'"epoch":(\d+)', page.text)
+        part_b_match = re.search(r'"partB":"([^"]+)"', page.text)
+        app_match = re.search(
+            re.escape(self.CDN_URL) + r'/entry/app\.[A-Za-z0-9_.-]+\.js',
+            page.text,
+        )
+        if not (epoch_match and part_b_match and app_match):
+            raise RuntimeError("Could not discover mkissa API key metadata")
+
+        app = self.session.get(app_match.group(0), timeout=20)
+        app.raise_for_status()
+        chunks = re.findall(r'"\.\./chunks/([A-Za-z0-9_.-]+\.js)"', app.text)[:5]
+
+        mask_hex = None
+        for chunk in chunks:
+            response = self.session.get(f"{self.CDN_URL}/chunks/{chunk}", timeout=20)
+            response.raise_for_status()
+            match = re.search(r'(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])', response.text)
+            if match:
+                mask_hex = match.group(0)
+                break
+
+        if not mask_hex:
+            raise RuntimeError("Could not discover mkissa API key mask")
+
+        part_b = base64.b64decode(part_b_match.group(1))
+        mask = bytes.fromhex(mask_hex)
+        if len(part_b) != 32 or len(mask) != 32:
+            raise RuntimeError("Invalid mkissa API key material")
+
+        self._api_epoch = int(epoch_match.group(1))
+        self._api_key = bytes(a ^ b for a, b in zip(mask, part_b))
+
+    def _make_aa_req(self) -> str:
+        if self._api_key is None or self._api_epoch is None:
+            self._fetch_api_key()
+
+        timestamp = int(time.time()) // 300 * 300 * 1000
+        iv_seed = f"{self._api_epoch}:{self.QUERY_HASH}:{timestamp}".encode()
+        iv = hashlib.sha256(iv_seed).digest()[:12]
+        payload = json.dumps(
+            {"v": 1, "ts": timestamp, "epoch": self._api_epoch, "qh": self.QUERY_HASH},
+            separators=(",", ":"),
+        ).encode()
+        encrypted = AESGCM(self._api_key).encrypt(iv, payload, None)
+        return base64.b64encode(b"\x01" + iv + encrypted).decode()
+
+    def _decode_episode_response(self, data: Dict) -> Dict:
+        encoded = data.get("tobeparsed") or data.get("data", {}).get("tobeparsed")
+        if not encoded:
+            return data
+        if self._api_key is None:
+            raise RuntimeError("Missing mkissa response decryption key")
+
+        raw = base64.b64decode(encoded)
+        if len(raw) < 30 or raw[0] != 1:
+            raise RuntimeError("Invalid encrypted mkissa response")
+        decrypted = AESGCM(self._api_key).decrypt(raw[1:13], raw[13:], None)
+        decoded = json.loads(decrypted)
+        return decoded if "data" in decoded else {"data": decoded}
+
+    def _extract_with_ytdlp(self, url: str) -> Optional[str]:
+        try:
+            with YoutubeDL({
+                "quiet": True,
+                "no_warnings": True,
+                "socket_timeout": 10,
+                "http_headers": {"Referer": self.REFERER},
+            }) as ydl:
+                info = ydl.extract_info(url, download=False)
+            candidate = info.get("url") if info else None
+            if candidate and candidate != url and "/embed" not in candidate:
+                print("Found stream URL with yt-dlp")
+                return candidate
+        except Exception as exc:
+            print(f"yt-dlp could not extract this provider: {exc}")
+        return None
 
     def search_anime(self, query: str, mode: str = "sub") -> List[Dict]:
         """
@@ -43,15 +148,7 @@ class AniScraper:
         }
 
         try:
-            response = self.session.get(
-                self.API_URL,
-                params={
-                    "variables": json.dumps(variables),
-                    "query": search_gql
-                }
-            )
-            response.raise_for_status()
-            data = response.json()
+            data = self._graphql(search_gql, variables)
             
             results = []
             if "data" in data and "shows" in data["data"]:
@@ -83,15 +180,7 @@ class AniScraper:
         variables = {"showId": show_id}
 
         try:
-            response = self.session.get(
-                self.API_URL,
-                params={
-                    "variables": json.dumps(variables),
-                    "query": episodes_list_gql
-                }
-            )
-            response.raise_for_status()
-            data = response.json()
+            data = self._graphql(episodes_list_gql, variables)
 
             if "data" in data and "show" in data["data"]:
                 details = data["data"]["show"]["availableEpisodesDetail"]
@@ -115,14 +204,6 @@ class AniScraper:
         Gets the embed URLs for a specific episode.
         Equivalent to `get_episode_url` query part.
         """
-        episode_embed_gql = """
-        query ($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) {
-            episode( showId: $showId translationType: $translationType episodeString: $episodeString ) {
-                episodeString sourceUrls
-            }
-        }
-        """
-        
         variables = {
             "showId": show_id,
             "translationType": mode,
@@ -134,11 +215,17 @@ class AniScraper:
                 self.API_URL,
                 params={
                     "variables": json.dumps(variables),
-                    "query": episode_embed_gql
-                }
+                    "extensions": json.dumps({
+                        "persistedQuery": {"version": 1, "sha256Hash": self.QUERY_HASH},
+                        "aaReq": self._make_aa_req(),
+                    }, separators=(",", ":")),
+                },
+                timeout=20,
             )
             response.raise_for_status()
-            data = response.json()
+            data = self._decode_episode_response(response.json())
+            if data.get("errors"):
+                raise RuntimeError(data["errors"][0].get("message", "Episode request failed"))
             
             sources = []
             if "data" in data and "episode" in data["data"]:
@@ -182,9 +269,11 @@ class AniScraper:
             "14": ",", "03": ";", "05": "=", "1d": "%",
         }
 
-        # 1. Remove "--" prefix if present (implied by regex in ani-cli)
-        if url.startswith("--"):
-            url = url[2:]
+        # Only the custom "--" values use ani-cli's substitution cipher.
+        # Normal provider URLs must pass through unchanged.
+        if not url.startswith("--"):
+            return url
+        url = url[2:]
 
         # 2. Split into 2-char chunks and map
         decoded_chars = []
@@ -215,8 +304,10 @@ class AniScraper:
         Given a source embed object (from get_episode_embeds), returns the final stream URL (m3u8/mp4).
         Equivalent to `get_links` in ani-cli.
         """
+        self.last_error = None
         source_url = source_embed.get("sourceUrl")
         if not source_url:
+            self.last_error = "Provider did not return a source URL"
             return None
             
         # Decrypt first
@@ -239,7 +330,9 @@ class AniScraper:
         print(f"Fetching stream details from: {full_url}")
 
         try:
-            response = self.session.get(full_url)
+            # Provider pages are third-party services and some of them can stop
+            # responding entirely. Never let one provider block the play queue.
+            response = self.session.get(full_url, timeout=(5, 10))
             response.raise_for_status()
             
             try:
@@ -296,8 +389,12 @@ class AniScraper:
                 # Step 4: Check if response is HTML/redirect (invalid!)
                 # If it's HTML or redirect page, this provider failed - return None to try next provider
                 if '<html' in text.lower() or 'redirecting' in text.lower() or '<script' in text.lower():
+                    extracted = self._extract_with_ytdlp(full_url)
+                    if extracted:
+                        return extracted
                     print(f"⚠ Response is HTML/redirect page, not a valid stream URL!")
                     print(f"⚠ This provider is blocked or requires JavaScript. Skipping...")
+                    self.last_error = "Provider requires JavaScript or returned an HTML page"
                     return None
                 
                 # Step 5: Last resort - if it looks like a valid URL, return for yt-dlp
@@ -307,6 +404,7 @@ class AniScraper:
                     return full_url
                 
                 print(f"❌ No valid video link found from this provider.")
+                self.last_error = "No media URL found in provider response"
                 return None
 
             # The response JSON structure varies.
@@ -326,10 +424,12 @@ class AniScraper:
                 if len(data["links"]) > 0:
                     return data["links"][0]["link"]
             
+            self.last_error = "Provider JSON did not contain usable links"
             return None
 
         except Exception as e:
             print(f"Error fetching stream link: {e}")
+            self.last_error = str(e)
             return None
 
 if __name__ == "__main__":

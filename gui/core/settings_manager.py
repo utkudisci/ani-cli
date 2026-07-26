@@ -23,7 +23,17 @@ class SettingsManager:
                 "show_title": True
             },
             "appearance": {
-                "theme": "standard"
+                "theme": "standard",
+                "language": "tr"
+            },
+            "updates": {
+                "check_automatically": True
+            },
+            "diagnostics": {
+                "logging_enabled": True
+            },
+            "setup": {
+                "completed": False
             }
         }
         

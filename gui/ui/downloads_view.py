@@ -2,6 +2,7 @@ import flet as ft
 from core.download_manager import download_manager
 from core.theme_manager import theme_manager
 from ui.components.download_card import DownloadCard
+from core.i18n import tr
 
 class DownloadsView(ft.Container):
     def __init__(self, page: ft.Page, on_close=None):
@@ -15,7 +16,7 @@ class DownloadsView(ft.Container):
         self.bgcolor = theme.surface
         self.border_radius = 10
         self.padding = 20
-        self.margin = ft.margin.symmetric(horizontal=50, vertical=50)
+        self.margin = ft.Margin.symmetric(horizontal=50, vertical=50)
         self.shadow = ft.BoxShadow(
             blur_radius=20,
             color="black" # Shadow usually stays black
@@ -32,7 +33,7 @@ class DownloadsView(ft.Container):
         
         self.content = ft.Column([
             ft.Row([
-                ft.Text("Downloads", size=28, weight=ft.FontWeight.BOLD),
+                ft.Text(tr("downloads_title"), size=28, weight=ft.FontWeight.BOLD),
                 ft.IconButton(ft.Icons.CLOSE, on_click=self._close_overlay)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             self.content_list
@@ -79,7 +80,7 @@ class DownloadsView(ft.Container):
                     ft.Container(
                         content=ft.Column([
                             ft.Icon(ft.Icons.DOWNLOAD_DONE, size=64, color="grey"),
-                            ft.Text("No active downloads", color="grey", size=16)
+                            ft.Text(tr("no_downloads"), color="grey", size=16)
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         alignment=ft.Alignment(0, 0),
                         expand=True,

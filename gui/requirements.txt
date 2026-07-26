@@ -1,2 +1,5 @@
 flet
 requests
+pypresence
+cryptography
+yt-dlp

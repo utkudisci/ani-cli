@@ -1,5 +1,6 @@
 
 import flet as ft
+import threading
 from core.scraper import AniScraper
 from ui.detail_view import EpisodeDetailView
 from ui.home_view import HomeView
@@ -11,6 +12,9 @@ from ui.settings_view import SettingsView
 from ui.downloads_view import DownloadsView
 from core.settings_manager import settings_manager
 from core.theme_manager import theme_manager
+from core.i18n import tr
+from core.update_manager import update_manager
+from core.diagnostics import diagnostics
 
 class AppLayout(ft.Column):
     def __init__(self, page: ft.Page):
@@ -30,7 +34,7 @@ class AppLayout(ft.Column):
             run_spacing=10,
         )
         self.search_field = ft.TextField(
-            hint_text="Search anime...",
+            hint_text=tr("search"),
             expand=True,
             on_submit=self.search_anime,
             autofocus=True
@@ -41,7 +45,7 @@ class AppLayout(ft.Column):
         self.loading_overlay = ft.Container(
             content=ft.Column([
                 ft.ProgressRing(width=64, height=64, stroke_width=6),
-                ft.Text("Searching...", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text(tr("searching"), size=18, weight=ft.FontWeight.BOLD),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=20, alignment=ft.MainAxisAlignment.CENTER),
             visible=False,
             alignment=ft.Alignment(0, 0),
@@ -78,8 +82,26 @@ class AppLayout(ft.Column):
         self.page.floating_action_button = self.fabs_row
         self.page.update()
 
+        if not settings_manager.get("setup", "completed"):
+            self._open_settings(None)
+        elif settings_manager.get("updates", "check_automatically"):
+            threading.Thread(target=self._automatic_update_check, daemon=True).start()
+
     def will_unmount(self):
         theme_manager.remove_listener(self._on_theme_update)
+
+    def _automatic_update_check(self):
+        result = update_manager.check()
+        if result.get("ok") and result.get("update_available"):
+            message = f"Yeni Ani-GUI güncellemesi mevcut ({result['remote']}): {result.get('message', '')}"
+            diagnostics.log("info", "updates", "Update notification shown", remote=result["remote"])
+            try:
+                snackbar = ft.SnackBar(content=ft.Text(message), duration=8000)
+                self.page.overlay.append(snackbar)
+                snackbar.open = True
+                self.page.update()
+            except Exception:
+                pass
         
     def _on_theme_update(self):
         """Update UI when theme changes"""
@@ -102,7 +124,7 @@ class AppLayout(ft.Column):
             ft.FloatingActionButton(
                 icon=ft.Icons.SETTINGS,
                 on_click=self._open_settings,
-                tooltip="Settings",
+                tooltip=tr("settings"),
                 bgcolor=theme.surface,
                 foreground_color=theme.text
             )
@@ -190,7 +212,7 @@ class AppLayout(ft.Column):
 
         # Run search in background (or just sync for now, flet handles it ok-ish)
         # Ideally threading, but lets keep simple first
-        results = self.scraper.search_anime(query)
+        results = self.scraper.search_anime(query, mode=self.current_mode)
         
         for anime in results:
             self.results_grid.controls.append(
@@ -212,7 +234,7 @@ class AppLayout(ft.Column):
                             src=anime.get("thumbnail") or "https://via.placeholder.com/150",
                             fit=ft.ImageFit.COVER if hasattr(ft, "ImageFit") else "cover",
                             expand=True,
-                            border_radius=ft.border_radius.vertical(top=10)
+                            border_radius=ft.BorderRadius.vertical(top=10)
                         ),
                         ft.Container(
                             content=ft.Text(

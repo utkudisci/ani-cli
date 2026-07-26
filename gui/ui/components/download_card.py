@@ -38,6 +38,11 @@ class DownloadCard(ft.Card):
             tooltip="Cancel Download",
             on_click=self.cancel_download
         )
+        self.pause_btn = ft.IconButton(
+            ft.Icons.PAUSE,
+            tooltip="Duraklat",
+            on_click=self.toggle_pause,
+        )
         
         self.icon_view = ft.Icon(ft.Icons.DOWNLOAD_FOR_OFFLINE)
 
@@ -49,6 +54,7 @@ class DownloadCard(ft.Card):
                 ft.Row([
                     self.icon_view,
                     self.title_text,
+                    self.pause_btn,
                     self.cancel_btn
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 self.progress_bar,
@@ -66,6 +72,17 @@ class DownloadCard(ft.Card):
         self.cancel_btn.disabled = True
         self.update()
 
+    def toggle_pause(self, e):
+        if self.item.status == "paused":
+            download_manager.resume_download(self.item.id)
+            self.pause_btn.icon = ft.Icons.PAUSE
+            self.pause_btn.tooltip = "Duraklat"
+        else:
+            download_manager.pause_download(self.item.id)
+            self.pause_btn.icon = ft.Icons.PLAY_ARROW
+            self.pause_btn.tooltip = "Devam et"
+        self.update()
+
     def refresh_theme(self):
         """Update colors based on current theme"""
         theme = theme_manager.get_theme()
@@ -75,6 +92,7 @@ class DownloadCard(ft.Card):
         
         self.icon_view.color = theme.primary
         self.cancel_btn.icon_color = theme.error
+        self.pause_btn.icon_color = theme.primary
         
         # Meta text usually secondary/greyish. Using theme.text with opacity or just theme.text
         self.meta_text.color = theme.text
@@ -107,6 +125,15 @@ class DownloadCard(ft.Card):
         
         if self.item.status in ["completed", "error", "cancelled"]:
             self.cancel_btn.visible = False
+            self.pause_btn.visible = False
             self.progress_bar.visible = False if self.item.status == "cancelled" else True
+        elif self.item.status == "paused":
+            self.pause_btn.icon = ft.Icons.PLAY_ARROW
+            self.pause_btn.tooltip = "Devam et"
+            self.pause_btn.visible = True
+        else:
+            self.pause_btn.icon = ft.Icons.PAUSE
+            self.pause_btn.tooltip = "Duraklat"
+            self.pause_btn.visible = True
             
         self.update()

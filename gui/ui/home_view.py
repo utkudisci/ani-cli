@@ -5,6 +5,7 @@ from core.history_manager import history_manager
 from core.history_manager import history_manager
 from core.settings_manager import settings_manager
 from core.theme_manager import theme_manager
+from core.i18n import tr
 
 class HomeView(ft.Column):
     def __init__(self, page: ft.Page, on_search=None, on_anime_click=None, on_mode_change=None):
@@ -17,7 +18,7 @@ class HomeView(ft.Column):
         
         # Search field
         self.search_field = ft.TextField(
-            hint_text="Search anime...",
+            hint_text=tr("search"),
             autofocus=True,
             on_submit=self.handle_search,
             expand=True,
@@ -101,7 +102,7 @@ class HomeView(ft.Column):
                 content=ft.Column([
                     ft.Row([
                         ft.Icon(ft.Icons.PLAY_CIRCLE_OUTLINE, size=24),
-                        ft.Text("Continue Watching", size=20, weight=ft.FontWeight.BOLD),
+                        ft.Text(tr("continue_watching"), size=20, weight=ft.FontWeight.BOLD),
                     ]),
                     ft.Container(height=10),
                     self.continue_watching_grid,
@@ -114,7 +115,7 @@ class HomeView(ft.Column):
                 content=ft.Column([
                     ft.Row([
                         ft.Icon(ft.Icons.FAVORITE, size=24, color="red"),
-                        ft.Text("Favorites", size=20, weight=ft.FontWeight.BOLD),
+                        ft.Text(tr("favorites"), size=20, weight=ft.FontWeight.BOLD),
                     ]),
                     ft.Container(height=10),
                     self.favorites_grid,
@@ -137,7 +138,7 @@ class HomeView(ft.Column):
             # Show placeholder if empty
             self.continue_watching_grid.controls.append(
                 ft.Text(
-                    "No recent anime yet. Start watching something!",
+                    tr("no_recent"),
                     color="grey",
                     italic=True,
                 )
@@ -163,7 +164,7 @@ class HomeView(ft.Column):
                         src=anime.get("thumbnail") or "https://via.placeholder.com/150",
                         fit="cover",
                         expand=True,
-                        border_radius=ft.border_radius.vertical(top=10)
+                        border_radius=ft.BorderRadius.vertical(top=10)
                     ),
                     ft.Container(
                         content=ft.Column([
@@ -210,7 +211,7 @@ class HomeView(ft.Column):
             # Show placeholder if empty
             self.favorites_grid.controls.append(
                 ft.Text(
-                    "No favorites yet. Add some from anime details!",
+                    tr("no_favorites"),
                     color="grey",
                     italic=True,
                 )
@@ -236,7 +237,7 @@ class HomeView(ft.Column):
                         src=fav.get("thumbnail") or "https://via.placeholder.com/150",
                         fit="cover",
                         expand=True,
-                        border_radius=ft.border_radius.vertical(top=10)
+                        border_radius=ft.BorderRadius.vertical(top=10)
                     ),
                     ft.Container(
                         content=ft.Text(

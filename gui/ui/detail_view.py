@@ -4,6 +4,8 @@ import os
 import subprocess
 import shutil
 import threading
+import glob
+import time
 from core.scraper import AniScraper
 from core.download_manager import download_manager
 from core.history_manager import history_manager
@@ -11,6 +13,9 @@ from core.rpc_manager import rpc_manager
 from core.rpc_manager import rpc_manager
 from core.settings_manager import settings_manager
 from core.theme_manager import theme_manager
+from core.provider_manager import provider_manager
+from core.diagnostics import diagnostics
+from core.i18n import tr
 
 def find_player_executable(player_name):
     """Find player executable with robust Windows support.
@@ -47,10 +52,15 @@ def find_player_executable(player_name):
             r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe",
         ]
     elif player_name == "mpv":
+        winget_paths = glob.glob(os.path.expandvars(
+            r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\mpv-player.mpv-CI.MSVC_*\mpv.exe"
+        ))
         known_paths = [
             r"C:\Program Files\mpv\mpv.exe",
             r"C:\Program Files (x86)\mpv\mpv.exe",
             os.path.expanduser(r"~\scoop\apps\mpv\current\mpv.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Links\mpv.exe"),
+            *winget_paths,
         ]
     else:
         known_paths = []
@@ -86,7 +96,7 @@ class EpisodeDetailView(ft.Column):
         self.loading_overlay = ft.Container(
             content=ft.Column([
                 ft.ProgressRing(width=64, height=64, stroke_width=6),
-                ft.Text("Loading episodes...", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text(tr("loading_episodes"), size=18, weight=ft.FontWeight.BOLD),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=20, alignment=ft.MainAxisAlignment.CENTER),
             alignment=ft.Alignment(0, 0),
             expand=True,
@@ -119,13 +129,13 @@ class EpisodeDetailView(ft.Column):
         watch_color = theme.text if self.action_mode == "watch" else None
         
         self.btn_watch = ft.ElevatedButton(
-            "Watch", 
+            tr("watch"),
             icon=ft.Icons.PLAY_ARROW, 
             on_click=lambda e: self.set_action_mode("watch"),
             bgcolor=watch_bg, color=watch_color
         )
         self.btn_download = ft.OutlinedButton(
-            "Download", 
+            tr("download"),
             icon=ft.Icons.DOWNLOAD, 
             on_click=lambda e: self.set_action_mode("download")
         )
@@ -157,11 +167,11 @@ class EpisodeDetailView(ft.Column):
         theme = theme_manager.get_theme()
         
         if self.action_mode == "watch":
-            self.btn_watch = ft.ElevatedButton("Watch", icon=ft.Icons.PLAY_ARROW, on_click=lambda e: self.set_action_mode("watch"), bgcolor=theme.primary, color=theme.text)
-            self.btn_download = ft.OutlinedButton("Download", icon=ft.Icons.DOWNLOAD, on_click=lambda e: self.set_action_mode("download"))
+            self.btn_watch = ft.ElevatedButton(tr("watch"), icon=ft.Icons.PLAY_ARROW, on_click=lambda e: self.set_action_mode("watch"), bgcolor=theme.primary, color=theme.text)
+            self.btn_download = ft.OutlinedButton(tr("download"), icon=ft.Icons.DOWNLOAD, on_click=lambda e: self.set_action_mode("download"))
         else:
-            self.btn_watch = ft.OutlinedButton("Watch", icon=ft.Icons.PLAY_ARROW, on_click=lambda e: self.set_action_mode("watch"))
-            self.btn_download = ft.ElevatedButton("Download", icon=ft.Icons.DOWNLOAD, on_click=lambda e: self.set_action_mode("download"), bgcolor=theme.primary, color=theme.text)
+            self.btn_watch = ft.OutlinedButton(tr("watch"), icon=ft.Icons.PLAY_ARROW, on_click=lambda e: self.set_action_mode("watch"))
+            self.btn_download = ft.ElevatedButton(tr("download"), icon=ft.Icons.DOWNLOAD, on_click=lambda e: self.set_action_mode("download"), bgcolor=theme.primary, color=theme.text)
             
         self.mode_control.controls = [self.btn_watch, self.btn_download]
         self.mode_control.update()
@@ -380,10 +390,25 @@ class EpisodeDetailView(ft.Column):
         self.content_stack.update()
 
     def _on_error(self, message):
-         if self.loading_overlay in self.content_stack.controls:
-             self.content_stack.controls.remove(self.loading_overlay)
-         self.content_stack.update()
-         self.show_snack(f"Error: {message}")
+        if self.loading_overlay in self.content_stack.controls:
+            self.content_stack.controls.remove(self.loading_overlay)
+        self.content_stack.update()
+        if len(str(message)) > 180:
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("Yayın açılamadı"),
+                content=ft.Container(content=ft.Text(str(message), selectable=True), width=560, height=220),
+                actions=[ft.TextButton("Kapat", on_click=lambda e: self._close_error_dialog(dialog))],
+            )
+            self.page.overlay.append(dialog)
+            dialog.open = True
+            self.page.update()
+        else:
+            self.show_snack(f"Hata: {message}")
+
+    def _close_error_dialog(self, dialog):
+        dialog.open = False
+        self.page.update()
 
 
 
@@ -419,13 +444,21 @@ class EpisodeDetailView(ft.Column):
                 self.page.pubsub.send_all({"topic": "error", "data": "No embeds found!"})
                 return
 
-            # Try ALL providers (Blocking)
+            # Rank providers using persistent success rate, speed and recent failures.
+            embeds = provider_manager.sort(embeds)
+
+            # Try providers in priority order.
             stream_url = None
+            attempts = []
             for i, embed in enumerate(embeds):
                 provider_name = embed.get("sourceName", f"Provider {i+1}")
                 print(f"Trying provider: {provider_name}")
-                
+                started = time.monotonic()
                 stream_url = self.scraper.get_stream_link(embed)
+                duration = time.monotonic() - started
+                error = self.scraper.last_error
+                provider_manager.record(provider_name, bool(stream_url), duration, error)
+                attempts.append({"name": provider_name, "seconds": duration, "error": error})
                 if stream_url:
                     print(f"✓ Success! Provider '{provider_name}' returned: {stream_url}")
                     break  # Found a working provider
@@ -433,7 +466,13 @@ class EpisodeDetailView(ft.Column):
                     print(f"✗ Provider '{provider_name}' failed, trying next...")
 
             if not stream_url:
-                self.page.pubsub.send_all({"topic": "error", "data": "No valid stream links found!"})
+                summary = "; ".join(
+                    f"{item['name']} ({item['seconds']:.1f} sn): {item['error'] or 'geçersiz yanıt'}"
+                    for item in attempts
+                )
+                message = f"Yayın açılamadı. {len(attempts)} sağlayıcı denendi: {summary}"
+                diagnostics.log("error", "playback", "All providers failed", anime=self.anime["title"], episode=str(ep_no), attempts=attempts)
+                self.page.pubsub.send_all({"topic": "error", "data": message})
                 return
 
             # Marshal success to UI thread via PubSub
@@ -473,21 +512,21 @@ class EpisodeDetailView(ft.Column):
                 cmd = [
                     vlc_path,
                     f"--meta-title={self.anime['title']} - Episode {ep_no}",
-                    "--http-referrer=https://allmanga.to",
+                    "--http-referrer=https://mkissa.to",
                     stream_url
                 ]
         
         if player == "mpv":  # MPV (default or fallback)
             mpv_path = find_player_executable("mpv")
             if not mpv_path:
-                error_msg = "MPV not found! Please install MPV or configure a custom player path in settings."
+                error_msg = "MPV bulunamadı. Seçenekler ekranından indirip kurabilirsiniz."
                 self.show_snack(error_msg)
                 print(f"❌ {error_msg}")
                 return
             cmd = [
                 mpv_path,
                 f"--force-media-title={self.anime['title']} - Episode {ep_no}",
-                "--referrer=https://allmanga.to",
+                "--referrer=https://mkissa.to",
                 stream_url
             ]
         
